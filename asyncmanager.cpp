@@ -57,7 +57,7 @@ public:
 
             emit taskFinished(task);
 
-            task.destroy();
+            if (!task.isNull()) task.destroy();
         }
         catch (const std::exception& e) {
             emit taskFailed(
@@ -175,13 +175,6 @@ AsyncTaskManager::AsyncTaskManager(QObject* parent)
         m_worker->moveToThread(&m_thread);
 
     connect(
-        &m_thread,
-        &QThread::started,
-        m_worker,
-        &Worker::process
-        );
-
-    connect(
         m_worker,
         &Worker::taskStarted,
         this,
@@ -234,7 +227,16 @@ void AsyncTaskManager::addTask(AsyncTask* task)
 {
     if (!task || !m_worker)
         return;
-    m_worker->addTask(task);
+
+    QMetaObject::invokeMethod(
+        m_worker,
+        [this, task]() {
+            Util::println("Queueing Task ", task->getName());
+            m_worker->addTask(task->getReference());
+        },
+        Qt::QueuedConnection
+        );
+
     Util::println("Adding task ", task->getName());
 }
 
