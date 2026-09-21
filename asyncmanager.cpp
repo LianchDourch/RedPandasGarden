@@ -45,24 +45,34 @@ public:
         }
     }
 
-    void addTask(AsyncTask* task)
+    void addTask(rpt::SafePtr<AsyncTask> task)
     {
-        if (!task)
+        if (task.isNull())
             return;
 
-        {
-            QMutexLocker locker(&m_mutex);
+        try {
+            m_busy.store(true);
 
-            if (m_stopping) {
-                delete task;
-                return;
-            }
+            task->start();
 
-            m_queue.enqueue(task);
-            m_busy = true;
+            emit taskFinished(task);
+
+            task.destroy();
+        }
+        catch (const std::exception& e) {
+            emit taskFailed(
+                task,
+                QString::fromUtf8(e.what())
+                );
+        }
+        catch (...) {
+            emit taskFailed(
+                task,
+                QStringLiteral("Unknown exception")
+                );
         }
 
-        m_waitCondition.wakeOne();
+        m_busy.store(false);
     }
 
     void stop()
@@ -82,10 +92,9 @@ public:
 
     bool isBusy() const
     {
-        QMutexLocker locker(&m_mutex);
         return m_busy;
     }
-
+/*
     void process()
     {
         for (;;) {
@@ -141,7 +150,7 @@ public:
             }
         }
     }
-
+*/
 signals:
     void taskStarted(rpt::SafePtr<AsyncTask> task);
     void taskFinished(rpt::SafePtr<AsyncTask> task);
@@ -153,7 +162,7 @@ private:
     QQueue<AsyncTask*> m_queue;
 
     bool m_stopping = false;
-    bool m_busy = false;
+    std::atomic_bool m_busy = false;
 
 };
 
