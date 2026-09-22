@@ -37,11 +37,8 @@ public:
 
         ~Worker() override
     {
-
-        QMutexLocker locker(&m_mutex);
-
         while (!m_queue.isEmpty()) {
-            delete m_queue.dequeue();
+            m_queue.dequeue()->getReference().destroy();
         }
     }
 
@@ -73,21 +70,6 @@ public:
         }
 
         m_busy.store(false);
-    }
-
-    void stop()
-    {
-        {
-            QMutexLocker locker(&m_mutex);
-
-            m_stopping = true;
-
-            while (!m_queue.isEmpty()) {
-                delete m_queue.dequeue();
-            }
-        }
-
-        m_waitCondition.wakeOne();
     }
 
     bool isBusy() const
@@ -156,9 +138,9 @@ signals:
     void taskFinished(rpt::SafePtr<AsyncTask> task);
     void taskFailed(rpt::SafePtr<AsyncTask> task, const QString& error);
 
-private:
+private:/*
     mutable QMutex m_mutex;
-    QWaitCondition m_waitCondition;
+    QWaitCondition m_waitCondition;*/
     QQueue<AsyncTask*> m_queue;
 
     bool m_stopping = false;
@@ -248,8 +230,6 @@ void AsyncTaskManager::stop()
 {
     if (!m_worker)
         return;
-
-    m_worker->stop();
 
 }
 
