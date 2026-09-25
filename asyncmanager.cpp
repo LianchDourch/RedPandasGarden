@@ -54,7 +54,7 @@ public:
 
             emit taskFinished(task);
 
-            if (!task.isNull()) task.destroy();
+            // if (!task.isNull()) task->deleteLater();
         }
         catch (const std::exception& e) {
             emit taskFailed(

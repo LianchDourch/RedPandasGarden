@@ -31,6 +31,7 @@ private:
 
 public:
     explicit AsyncTask(QObject* parent, const QString& name);
+    ~AsyncTask() { Util::println("Deleting task ", name); }
 
     virtual void run() = 0;
 
