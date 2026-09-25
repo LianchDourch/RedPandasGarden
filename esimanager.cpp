@@ -527,7 +527,11 @@ static constexpr auto ESI_CHARACTER_URL =
 EsiConnector::EsiConnector(QObject* parent)
     : QObject(parent)
 {
-    EsiManager::TASK_MANAGER->addTaskAndWait(QString(), [this] () mutable { setupOAuth(); return 0; });
+    if (QThread::currentThread() != EsiManager::TASK_MANAGER->getWorkerThread()) {
+        EsiManager::TASK_MANAGER->addTaskAndWait(QString(), [this] () mutable { setupOAuth(); return 0; });
+    } else {
+        setupOAuth();
+    }
 }
 
 void EsiConnector::setupOAuth()

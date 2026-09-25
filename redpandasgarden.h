@@ -20,7 +20,7 @@ public:
 
     static void preInit() {
         TASK_MANAGER = new AsyncTaskManager(QCoreApplication::instance());
-        TASK_MANAGER->addTask("Repag Pre Init", [] () { RedPandasGarden::networkManager = new QNetworkAccessManager{}; });
+        TASK_MANAGER->addTask("Repag Pre Init", [] () { Util::println("Pre Initing Repag"); RedPandasGarden::networkManager = new QNetworkAccessManager{}; });
     }
 
     static void postInit() {
