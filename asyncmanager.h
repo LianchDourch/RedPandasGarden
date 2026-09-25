@@ -33,12 +33,33 @@ public:
     explicit AsyncTask(QObject* parent, const QString& name);
     ~AsyncTask() { Util::println("Deleting task ", name); }
 
-    virtual void run() = 0;
-
-    void start();
+public slots:
+    /**
+     * Appelé dans le thread du AsyncTaskManager.
+     *
+     * La tâche doit effectuer son travail ici, ou déclencher
+     * son travail de manière asynchrone.
+     *
+     * IMPORTANT :
+     * run() doit appeler finish() lorsqu'elle est réellement terminée.
+     */
+    virtual void run();
 
 signals:
-    void stateChanged(const QString& step, double progress);
+    void finished();
+    void failed(const QString& error);
+    void stateChanged(const QString& name, double progression);
+
+protected:
+    void finish()
+    {
+        emit finished();
+    }
+
+    void fail(const QString& error)
+    {
+        emit failed(error);
+    }
 };
 
 class LambdaAsyncTask : public AsyncTask
@@ -64,8 +85,57 @@ public:
 
 typedef rpt::SafePtr<AsyncTask> Task;
 
+class AsyncTaskWorker : public QObject
+{
+    Q_OBJECT
 
-class AsyncTaskManager : public QObject, public RSafeObject
+public:
+    explicit AsyncTaskWorker(QObject* parent = nullptr);
+
+public slots:
+    /**
+     * Ajoute une task depuis le thread du worker.
+     */
+    void enqueue(AsyncTask* task);
+
+    /**
+     * Demande l'arrêt du worker.
+     */
+    void stop();
+
+signals:
+    void taskStarted(AsyncTask* task);
+    void taskFinished(AsyncTask* task);
+    void taskFailed(AsyncTask* task, const QString& error);
+
+    void idle();
+
+private slots:
+    void startNext();
+    void onTaskFinished();
+    void onTaskFailed(const QString& error);
+
+private:
+    Q_DISABLE_COPY(AsyncTaskWorker)
+
+    struct TaskEntry
+    {
+        AsyncTask* task = nullptr;
+        QMetaObject::Connection finishedConnection;
+        QMetaObject::Connection failedConnection;
+    };
+
+    QQueue<AsyncTask*> m_queue;
+
+    AsyncTask* m_currentTask = nullptr;
+
+    QMetaObject::Connection m_currentFinishedConnection;
+    QMetaObject::Connection m_currentFailedConnection;
+
+    bool m_stopping = false;
+};
+
+class AsyncTaskManager : public QObject
 {
     Q_OBJECT
 
@@ -73,42 +143,105 @@ public:
     explicit AsyncTaskManager(QObject* parent = nullptr);
     ~AsyncTaskManager() override;
 
+    /**
+     * Ajoute une tâche à la file.
+     *
+     * Cette fonction doit être appelée depuis le thread qui possède
+     * actuellement la task.
+     *
+     * La task doit être sans parent.
+     */
     void addTask(AsyncTask* task);
-    void addTask(const QString& name, std::function<void()> func);
-    template<typename F>
-    auto addTaskAndWait(const QString& name, F&& func)
+
+    void addTask(const QString &name, std::function<void()> func) {
+        addTask(new LambdaAsyncTask(func, nullptr, name));
+    }
+
+
+    template<typename Func>
+    auto addTaskAndWait(const QString& name, Func&& function)
+        -> std::invoke_result_t<Func>
     {
-        using Result = std::invoke_result_t<F>;
+        using ReturnType = std::invoke_result_t<Func>;
 
-        QSemaphore semaphore(0);
-        std::optional<Result> result;
+        /*
+     * Appeler cette fonction depuis le worker thread provoquerait
+     * un deadlock avec BlockingQueuedConnection / future.wait().
+     */
+        if (QThread::currentThread() == &m_thread)
+        {
+            throw std::logic_error(
+                "AsyncTaskManager::addTaskAndWait() cannot be called "
+                "from the worker thread."
+                );
+        }
 
-        addTask(name,
-            [&]() {
-                result.emplace(std::invoke(std::forward<F>(func)));
-                semaphore.release();
-            }
+        auto promise = std::make_shared<std::promise<ReturnType>>();
+        auto future = promise->get_future();
+
+        QMetaObject::invokeMethod(
+            m_worker,
+            [promise, function = std::forward<Func>(function), name]() mutable
+            {
+                Q_UNUSED(name);
+
+                try
+                {
+                    if constexpr (std::is_void_v<ReturnType>)
+                    {
+                        std::invoke(function);
+                        promise->set_value();
+                    }
+                    else
+                    {
+                        promise->set_value(
+                            std::invoke(function)
+                            );
+                    }
+                }
+                catch (...)
+                {
+                    promise->set_exception(std::current_exception());
+                }
+            },
+            Qt::QueuedConnection
             );
 
-        semaphore.acquire();
-
-        return std::move(*result);
+        /*
+     * Bloque le thread appelant.
+     *
+     * Le worker thread continue quant à lui à traiter ses événements.
+     */
+        return future.get();
     }
-    void stop();
-    bool isBusy() const;
 
-    QThread* getWorkerThread() { return &m_thread; }
+    /**
+     * Nombre de tâches actuellement connues du manager.
+     */
+    qsizetype taskCount() const;
+
+    /**
+     * Indique si le worker est en train d'exécuter une tâche.
+     */
+    bool isRunning() const;
+
+    inline QThread* getWorkerThread() { return &m_thread; }
 signals:
-    void taskStarted(rpt::SafePtr<AsyncTask> task);
-    void taskFinished(rpt::SafePtr<AsyncTask> task);
-    void taskFailed(rpt::SafePtr<AsyncTask> task, const QString& error);
+    void taskStarted(AsyncTask* task);
+    void taskFinished(AsyncTask* task);
+    void taskFailed(AsyncTask* task, const QString& error);
+
+    void idle();
 
 private:
-    class Worker;
+    Q_DISABLE_COPY(AsyncTaskManager)
 
     QThread m_thread;
-    Worker* m_worker = nullptr;
+    AsyncTaskWorker* m_worker = nullptr;
 
+    mutable QMutex m_mutex;
+    qsizetype m_taskCount = 0;
+    bool m_running = false;
 };
 
 class AsyncTaskWidget : public QAbstractButton

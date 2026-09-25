@@ -11,7 +11,7 @@ AsyncTask::AsyncTask(
 {
 }
 
-void AsyncTask::start()
+void AsyncTask::run()
 {
     setProgression(0.0);
     emit stateChanged(getCurrentStep(), getProgression());
@@ -24,161 +24,185 @@ void AsyncTask::start()
 
 }
 
-class AsyncTaskManager::Worker : public QObject
+
+AsyncTaskWorker::AsyncTaskWorker(QObject* parent)
+    : QObject(parent)
 {
-    Q_OBJECT
+}
 
-public:
-    explicit Worker(QObject* parent = nullptr)
-        : QObject(parent)
+void AsyncTaskWorker::enqueue(AsyncTask* task)
+{
+    if (!task)
+        return;
+
+    // Cette fonction doit toujours être appelée dans le worker thread.
+    Q_ASSERT(thread() == QThread::currentThread());
+
+    if (m_stopping)
     {
+        task->deleteLater();
+        return;
     }
 
+    m_queue.enqueue(task);
 
-        ~Worker() override
+    // Si aucune tâche n'est actuellement exécutée,
+    // on démarre immédiatement.
+    if (!m_currentTask)
+        startNext();
+}
+
+void AsyncTaskWorker::startNext()
+{
+    Q_ASSERT(thread() == QThread::currentThread());
+
+    if (m_currentTask)
+        return;
+
+    if (m_queue.isEmpty())
     {
-        while (!m_queue.isEmpty()) {
-            m_queue.dequeue()->getReference().destroy();
-        }
+        emit idle();
+        return;
     }
 
-    void addTask(rpt::SafePtr<AsyncTask> task)
+    m_currentTask = m_queue.dequeue();
+
+    AsyncTask* task = m_currentTask;
+
+    /*
+     * La task a déjà été déplacée dans notre thread par
+     * AsyncTaskManager::addTask().
+     *
+     * On peut donc maintenant lui donner un parent.
+     */
+    task->setParent(this);
+
+    /*
+     * Connexion directe car task et worker sont dans le même thread.
+     *
+     * On utilise des lambdas afin de savoir quelle task vient
+     * de terminer.
+     */
+    m_currentFinishedConnection =
+        connect(
+            task,
+            &AsyncTask::finished,
+            this,
+            &AsyncTaskWorker::onTaskFinished,
+            Qt::DirectConnection
+            );
+
+    m_currentFailedConnection =
+        connect(
+            task,
+            &AsyncTask::failed,
+            this,
+            &AsyncTaskWorker::onTaskFailed,
+            Qt::DirectConnection
+            );
+
+    emit taskStarted(task);
+
+    Util::println("Running Task ", task->getName());
+    task->run();
+    Util::println("Task ", task->getName(), " ended");
+}
+
+void AsyncTaskWorker::onTaskFinished()
+{
+    Q_ASSERT(thread() == QThread::currentThread());
+
+    if (!m_currentTask)
+        return;
+
+    AsyncTask* task = m_currentTask;
+
+    disconnect(m_currentFinishedConnection);
+    disconnect(m_currentFailedConnection);
+
+    m_currentFinishedConnection = {};
+    m_currentFailedConnection = {};
+
+    m_currentTask = nullptr;
+
+    emit taskFinished(task);
+
+    /*
+     * deleteLater() est parfaitement adapté ici :
+     * la task appartient au worker thread.
+     */
+    task->deleteLater();
+
+    /*
+     * On passe à la suivante.
+     */
+    startNext();
+}
+
+void AsyncTaskWorker::onTaskFailed(const QString& error)
+{
+    Q_ASSERT(thread() == QThread::currentThread());
+
+    if (!m_currentTask)
+        return;
+
+    AsyncTask* task = m_currentTask;
+
+    disconnect(m_currentFinishedConnection);
+    disconnect(m_currentFailedConnection);
+
+    m_currentFinishedConnection = {};
+    m_currentFailedConnection = {};
+
+    m_currentTask = nullptr;
+
+    emit taskFailed(task, error);
+
+    task->deleteLater();
+
+    startNext();
+}
+
+void AsyncTaskWorker::stop()
+{
+    Q_ASSERT(thread() == QThread::currentThread());
+
+    m_stopping = true;
+
+    /*
+     * Les tâches qui n'ont pas encore commencé sont supprimées.
+     */
+    while (!m_queue.isEmpty())
     {
-        if (task.isNull())
-            return;
+        AsyncTask* task = m_queue.dequeue();
 
-        try {
-            m_busy.store(true);
-
-            task->start();
-
-            emit taskFinished(task);
-
-            // if (!task.isNull()) task->deleteLater();
-        }
-        catch (const std::exception& e) {
-            emit taskFailed(
-                task,
-                QString::fromUtf8(e.what())
-                );
-        }
-        catch (...) {
-            emit taskFailed(
-                task,
-                QStringLiteral("Unknown exception")
-                );
-        }
-
-        m_busy.store(false);
+        task->deleteLater();
     }
 
-    bool isBusy() const
-    {
-        return m_busy;
-    }
-/*
-    void process()
-    {
-        for (;;) {
-            AsyncTask* task = nullptr;
+    /*
+     * La tâche courante est laissée terminer.
+     *
+     * On pourrait aussi implémenter une annulation explicite,
+     * mais ce n'est pas possible génériquement pour un QObject.
+     */
+}
 
-            {
-                QMutexLocker locker(&m_mutex);
-
-                while (m_queue.isEmpty() && !m_stopping) {
-                    m_waitCondition.wait(&m_mutex);
-                }
-
-                if (m_stopping && m_queue.isEmpty()) {
-                    m_busy = false;
-                    return;
-                }
-
-                task = m_queue.dequeue();
-            }
-
-            if (!task)
-                continue;
-
-            emit taskStarted(task->getReference());
-            Util::println("Task Started: ", task->getName());
-
-            try {
-                task->start();
-                emit taskFinished(task->getReference());
-                Util::println("Task finished: ", task->getName());
-            }
-            catch (const std::exception& e) {
-                emit taskFailed(
-                    task->getReference(),
-                    QString::fromUtf8(e.what())
-                    );
-            }
-            catch (...) {
-                emit taskFailed(
-                    task->getReference(),
-                    QStringLiteral("Unknown exception")
-                    );
-            }
-
-            delete task;
-
-            {
-                QMutexLocker locker(&m_mutex);
-
-                if (m_queue.isEmpty()) {
-                    m_busy = false;
-                }
-            }
-        }
-    }
-*/
-signals:
-    void taskStarted(rpt::SafePtr<AsyncTask> task);
-    void taskFinished(rpt::SafePtr<AsyncTask> task);
-    void taskFailed(rpt::SafePtr<AsyncTask> task, const QString& error);
-
-private:/*
-    mutable QMutex m_mutex;
-    QWaitCondition m_waitCondition;*/
-    QQueue<AsyncTask*> m_queue;
-
-    bool m_stopping = false;
-    std::atomic_bool m_busy = false;
-
-};
 
 AsyncTaskManager::AsyncTaskManager(QObject* parent)
     : QObject(parent)
 {
-    m_worker = new Worker();
+    /*
+     * Le worker est créé dans le thread appelant.
+     *
+     * Il sera ensuite déplacé dans m_thread.
+     */
+    m_worker = new AsyncTaskWorker();
 
+    m_worker->moveToThread(&m_thread);
 
-        m_worker->moveToThread(&m_thread);
-
-    connect(
-        m_worker,
-        &Worker::taskStarted,
-        this,
-        &AsyncTaskManager::taskStarted,
-        Qt::QueuedConnection
-        );
-
-    connect(
-        m_worker,
-        &Worker::taskFinished,
-        this,
-        &AsyncTaskManager::taskFinished,
-        Qt::QueuedConnection
-        );
-
-    connect(
-        m_worker,
-        &Worker::taskFailed,
-        this,
-        &AsyncTaskManager::taskFailed,
-        Qt::QueuedConnection
-        );
+    /*
+     * Quand le thread démarre, le worker est déjà dans le bon thread.
+     */
 
     connect(
         &m_thread,
@@ -187,59 +211,155 @@ AsyncTaskManager::AsyncTaskManager(QObject* parent)
         &QObject::deleteLater
         );
 
-    m_thread.start();
-
-
-}
-
-AsyncTaskManager::~AsyncTaskManager()
-{
-    stop();
-
-
-        m_thread.quit();
-    m_thread.wait();
-
-    m_worker = nullptr;
-
-
-}
-
-void AsyncTaskManager::addTask(AsyncTask* task)
-{
-    if (!task || !m_worker)
-        return;
-
-    QMetaObject::invokeMethod(
+    connect(
         m_worker,
-        [this, task]() {
-            Util::println("Queueing Task ", task->getName());
-            m_worker->addTask(task->getReference());
+        &AsyncTaskWorker::taskStarted,
+        this,
+        [this](AsyncTask* task)
+        {
+            {
+                QMutexLocker lock(&m_mutex);
+                m_running = true;
+            }
+
+            emit taskStarted(task);
         },
         Qt::QueuedConnection
         );
 
-    Util::println("Adding task ", task->getName());
+    connect(
+        m_worker,
+        &AsyncTaskWorker::taskFinished,
+        this,
+        [this](AsyncTask* task)
+        {
+            {
+                QMutexLocker lock(&m_mutex);
+
+                --m_taskCount;
+                m_running = false;
+            }
+
+            emit taskFinished(task);
+        },
+        Qt::QueuedConnection
+        );
+
+    connect(
+        m_worker,
+        &AsyncTaskWorker::taskFailed,
+        this,
+        [this](AsyncTask* task, const QString& error)
+        {
+            {
+                QMutexLocker lock(&m_mutex);
+
+                --m_taskCount;
+                m_running = false;
+            }
+
+            emit taskFailed(task, error);
+        },
+        Qt::QueuedConnection
+        );
+
+    connect(
+        m_worker,
+        &AsyncTaskWorker::idle,
+        this,
+        &AsyncTaskManager::idle,
+        Qt::QueuedConnection
+        );
+
+    m_thread.start();
 }
 
-void AsyncTaskManager::addTask(const QString &name, std::function<void()> func) {
-    addTask(new LambdaAsyncTask(func, nullptr, name));
-}
-
-void AsyncTaskManager::stop()
+AsyncTaskManager::~AsyncTaskManager()
 {
-    if (!m_worker)
+    /*
+     * Demande au worker de ne plus accepter de nouvelles tâches.
+     */
+    if (m_worker)
+    {
+        QMetaObject::invokeMethod(
+            m_worker,
+            &AsyncTaskWorker::stop,
+            Qt::BlockingQueuedConnection
+            );
+    }
+
+    /*
+     * On attend que la tâche courante et les événements du worker
+     * soient terminés.
+     */
+    m_thread.quit();
+    m_thread.wait();
+
+    m_worker = nullptr;
+}
+
+void AsyncTaskManager::addTask(AsyncTask* task)
+{
+    if (!task)
         return;
 
+    /*
+     * Très important :
+     *
+     * addTask() est exécuté dans le thread qui possède la task.
+     *
+     * On peut donc appeler moveToThread() ici.
+     */
+    Q_ASSERT(task->parent() == nullptr);
+
+    QThread* currentThread = QThread::currentThread();
+
+    if (task->thread() != currentThread)
+    {
+        qWarning()
+        << "AsyncTaskManager::addTask(): task is not owned "
+           "by the calling thread.";
+
+        return;
+    }
+
+    /*
+     * On déplace la task vers le worker.
+     *
+     * C'est volontairement fait AVANT d'envoyer la task au worker.
+     */
+    task->moveToThread(&m_thread);
+
+    {
+        QMutexLocker lock(&m_mutex);
+        ++m_taskCount;
+    }
+
+    Util::println("Adding task " + task->getName());
+    /*
+     * enqueue() sera exécuté dans le worker thread.
+     */
+    QMetaObject::invokeMethod(
+        m_worker,
+        [worker = m_worker, task]()
+        {
+            Util::println("Queuing task " + task->getName());
+            worker->enqueue(task);
+        },
+        Qt::QueuedConnection
+        );
 }
 
-bool AsyncTaskManager::isBusy() const
+qsizetype AsyncTaskManager::taskCount() const
 {
-    if (!m_worker)
-        return false;
+    QMutexLocker lock(&m_mutex);
+    return m_taskCount;
+}
 
-    return m_worker->isBusy();
-
+bool AsyncTaskManager::isRunning() const
+{
+    QMutexLocker lock(&m_mutex);
+    return m_running;
 }
 
 AsyncTaskWidget::AsyncTaskWidget(Task task)
@@ -357,7 +477,5 @@ bool AsyncTaskListWidget::contains(rpt::SafePtr<AsyncTaskManager> manager)
     if (!manager)
         return false;
 
-    return widgets.contains(manager->getReference());
+    return widgets.contains(manager);
 }
-
-#include "asyncmanager.moc"

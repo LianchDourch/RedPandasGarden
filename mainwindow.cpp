@@ -44,7 +44,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 void MainWindow::refreshRunningTasks() {
     int counter = 0;
-    for (rpt::SafePtr<AsyncTaskManager> manager: tasksWidget->getLinkedManagers()) if (manager->isBusy()) counter++;
+    for (rpt::SafePtr<AsyncTaskManager> manager: tasksWidget->getLinkedManagers()) if (manager->isRunning()) counter++;
     runningTasks->setText(QString::number(counter) + " tasks running...");
 }
 
@@ -56,10 +56,10 @@ void MainWindow::refreshTasksWidget() {
     for (rpt::SafePtr<AsyncTaskManager> manager: tasksWidget->getLinkedManagers()) {
         if (tasksWidget->contains(manager)) continue;
         tasksWidget->connect(manager);
-        QObject::connect(manager.rawPtr(), &AsyncTaskManager::taskStarted, [this] (Task task) { refreshRunningTasks(); });
+        QObject::connect(manager.rawPtr(), &AsyncTaskManager::taskStarted, [this] (AsyncTask* task) { refreshRunningTasks(); });
         QObject::connect(manager.rawPtr(), &AsyncTaskManager::taskFinished, this, &MainWindow::refreshRunningTasks);
-        QObject::connect(manager.rawPtr(), &AsyncTaskManager::taskFailed, this, [this] (Task task, const QString& error) {
-            QMessageBox::critical(this, "Unable to perform task", "Error while performing task" + (task.isNull() ? "" : " '" + task->getName() + "'") + "\n" + error);
+        QObject::connect(manager.rawPtr(), &AsyncTaskManager::taskFailed, this, [this] (AsyncTask* task, const QString& error) {
+            QMessageBox::critical(this, "Unable to perform task", "Error while performing task" + (" '" + task->getName() + "'") + "\n" + error);
             refreshRunningTasks();
         });
     }
