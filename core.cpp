@@ -542,6 +542,13 @@ void Character::fetchSkills(EsiConnector* esiConnector, std::function<void(Chara
 }
 
 void Character::fetchDatas(EsiConnector* esiConnector, std::function<void(Character*)> then) {
+    if (!EsiManager::isInDataThread()) {
+        EsiManager::TASK_MANAGER->addTask("Fetching Character datas", [esiConnector, then, this] () {
+            fetchDatas(esiConnector, then);
+        });
+        return;
+    }
+
     fetchPortrait([esiConnector, this, then] (Character* c) {
         this->fetchSkills(esiConnector, then);
     });
@@ -566,18 +573,22 @@ Station* Stations::registerStation(Station* hub, bool save) {
 }
 
 void Characters::logCharacter(std::function<void (Character *)> then) {
-    EsiConnector* work = new EsiConnector();
+    EsiManager::TASK_MANAGER->addTask("Logging character", [then] () {
+        EsiConnector* work = new EsiConnector();
 
-    QObject::connect(work, &EsiConnector::loginSucceeded, [work, then] () {
-        Character* character = new Character(work->characterId(), work->characterName());
-        character->setConnector(work);
+        QObject::connect(work, &EsiConnector::loginSucceeded, [work, then] () {
+            QMetaObject::invokeMethod(qApp, [work, then] () {
+                Character* character = new Character(work->characterId(), work->characterName());
+                character->setConnector(work);
 
-        character->fetchDatas(work, [then] (Character* c) { Characters::VALUES.append(c); then(c); });
+                character->fetchDatas(work, [then] (Character* c) { Characters::VALUES.append(c); then(c); });
+            });
+        });
+
+        QObject::connect(work, &EsiConnector::loginFailed, Util::error);
+
+        work->login();
     });
-
-    QObject::connect(work, &EsiConnector::loginFailed, Util::error);
-
-    work->login();
 }
 
 Character::~Character() {
