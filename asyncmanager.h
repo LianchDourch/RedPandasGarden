@@ -43,7 +43,7 @@ public slots:
      * IMPORTANT :
      * run() doit appeler finish() lorsqu'elle est réellement terminée.
      */
-    virtual void run();
+    virtual void run() = 0;
 
 signals:
     void finished();
@@ -80,6 +80,7 @@ public:
     void run() override
     {
         func();
+        finish();
     }
 };
 

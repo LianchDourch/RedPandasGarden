@@ -11,19 +11,6 @@ AsyncTask::AsyncTask(
 {
 }
 
-void AsyncTask::run()
-{
-    setProgression(0.0);
-    emit stateChanged(getCurrentStep(), getProgression());
-
-    run();
-
-    setProgression(1.0);
-    emit stateChanged(getCurrentStep(), getProgression());
-
-
-}
-
 
 AsyncTaskWorker::AsyncTaskWorker(QObject* parent)
     : QObject(parent)
