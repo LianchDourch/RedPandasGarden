@@ -34,7 +34,9 @@ int main(int argc, char *argv[])
             Util::println("loaded esi");
             Core::load([] () {
                 RedPandasGarden::postInit();
-                MainWindow::INSTANCE->initialize();
+                QMetaObject::invokeMethod(qApp, [] () {
+                    MainWindow::INSTANCE->initialize();
+                });
             });
         });
     });
