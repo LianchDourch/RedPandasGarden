@@ -29,10 +29,14 @@ void ItemStreamsManagerForm::reset() {
         ui->label_nodeLabel->setText(node->getName());
         for (const ItemStack& item: node->getOutputs()) {
             ui->listWidget_itemList->addItem(item.getItem()->getName());
+            if (!currentItem.isValid()) {
+                currentItem = item.getDatas();
+                ui->listWidget_itemList->setCurrentItem(ui->listWidget_itemList->item(ui->listWidget_itemList->count() - 1));
+            }
             displayed.append(item.getDatas());
         }
 
-        setCurrentItemStack(ItemStackDatas(), node);
+        setCurrentItemStack(currentItem, node);
     } else {
         ui->label_nodeLabel->clear();
     }
@@ -47,19 +51,10 @@ void ItemStreamsManagerForm::setCurrentItemStack(const ItemStackDatas& item, Pro
     int index;
     for (const NodeConnection& conn: node->getChildren()) {
         ui->listWidget_connectedNodes->addItem(conn.getChild()->getUniqueName());
-        index = 0;
-        ItemStreamSlot slot;
-        for (const ItemStreamSlot& p: hierarchy) {
-            if (p.nodeLocalId == conn.getChild()->getLocalId()) {
-                slot = p;
-                break;
-            }
-            index += 1;
-        }
-        if (index < hierarchy.length()) {
-            if (index < ui->listWidget_hierarchy->count()) delete ui->listWidget_hierarchy->takeItem(index);
-            ui->listWidget_hierarchy->insertItem(index, slot.getName());
-        }
+    }
+    Util::println("Displaying a hierarchy of ", hierarchy.size(), " elements.");
+    for (const ItemStreamSlot& slot: hierarchy) {
+        ui->listWidget_hierarchy->addItem(slot.getName());
     }
 }
 
@@ -143,19 +138,31 @@ void ItemStreamsManagerForm::showSlotSelection(int nodeId, int slotIndex) {
 
 
 void ItemStreamsManagerForm::submit() {
-    if (!hasNode()) return;
+    if (!hasNode()) {
+        Util::error("No Node Defined for Item Stream Manager");
+        return;
+    }
     ProductionNode* node = getNode();
     ItemStream* work = node->getItemStreamPtr();
     QList<ItemStreamSlot> res = {};
+    Util::println("Uploading hierarchies:");
     for (const auto& [k, v]: editedHierarchies.asKeyValueRange()) {
+        if (!k.isValid()) {
+            Util::println(" -> Invalid itemstack with ", v.size(), " piece of data inside.");
+            continue;
+        }
+        Util::println(" -> ", k.getItem()->getName());
         QQueue<ItemStreamSlot> w = {};
         for (const ItemStreamSlot& s: v) {
+            Util::println("\t |--- ", s.getName(node->getName()));
             w.enqueue(s);
         }
         work->setHierarchy(k, w);
     }
+    Util::println("End of work");
     emit streamSaved();
     getChain()->notifyIOUpdate();
+    Util::println("Returning");
 }
 
 void ItemStreamsManagerForm::on_listWidget_hierarchy_itemClicked(QListWidgetItem *item)

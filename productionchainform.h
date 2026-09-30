@@ -414,6 +414,8 @@ private slots:
 
     void on_pushButton_saveChain_clicked();
 
+    void on_pushButton_debug_clicked();
+
 private:
     Ui::PoductionChainForm *ui;
     ProductionChainView* view;

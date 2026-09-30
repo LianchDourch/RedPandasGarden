@@ -16,15 +16,21 @@ ProductionChainForm::ProductionChainForm(QWidget *parent)
     ProductionChain* chain = new ProductionChain(1, "Test Chain 1", "Description de test");
     ProductionNode* n2 = new ProductionNode(ProductionNodeTypes::MANUFACTURE, Stations::fromName("Jita 4-4"));
     ProductionNode* n3 = new ProductionNode(ProductionNodeTypes::MANUFACTURE, Stations::fromName("Jita 4-4"));
+    ProductionNode* n4 = new ProductionNode(ProductionNodeTypes::MANUFACTURE, Stations::fromName("Jita 4-4"));
     ProductionNode* n5 = new ProductionNode(ProductionNodeTypes::SELL, Stations::fromName("Jita 4-4"));
 
     chain->addRawProductionNode(n2, true, true);
     chain->addChilProductionNode(n3, n2);
     chain->addChilProductionNode(n5, n3);
+    chain->addParentProductionNode(n4, n3);
     ItemStack bpc = {Items::fromName("Life Support Backup Unit Blueprint"), 1};
-    bpc.setBpc(true);
     n2->setMetadata(ProductionNodeProperties::MAIN_BLUEPRINT, QVariant::fromValue(bpc));
-    n3->setMetadata(ProductionNodeProperties::MAIN_BLUEPRINT, QVariant::fromValue(ItemStack{Items::fromName("Vexor Navy Issue Blueprint", true), 1}));
+    bpc = {Items::fromName("Auto-Integrity Preservation Seal Blueprint"), 1};
+    bpc.setMetadata(BLUEPRINT_MATEFFICIENCY_ISKEY, 0.9);
+    bpc.setMetadata(BLUEPRINT_TIMEEFFICIENCY_ISKEY, 0.8);
+    bpc.setBpc(true);
+    n4->setMetadata(ProductionNodeProperties::MAIN_BLUEPRINT, QVariant::fromValue(bpc));
+    n3->setMetadata(ProductionNodeProperties::MAIN_BLUEPRINT, QVariant::fromValue(ItemStack{Items::fromName("Squall Blueprint", true), 1}));
 
 
     new QHBoxLayout(ui->widget_content);
@@ -561,5 +567,43 @@ void ProductionChainForm::on_pushButton_refresh_clicked()
 void ProductionChainForm::on_pushButton_saveChain_clicked()
 {
     getChain()->saveToDB();
+}
+
+
+void ProductionChainForm::on_pushButton_debug_clicked()
+{
+    Util::println(" ========== [ MAGIC BUTTON ] ========== ");
+    ProductionNode* node = getChain()->get(4);
+    ProductionNodeIODatas datas = getChain()->getNodeIODatas().getOutputs(node);
+    Util::println("Type = " + node->getType()->getName());
+    Util::println("Blueprint = " + node->getMetadataRef(ProductionNodeProperties::MAIN_BLUEPRINT).value<ItemStack>().getBlueprint()->getName());
+
+
+    Util::println("Streams:");
+    for (ProductionNode* node: getChain()->getAllNodes()) {
+        ProductionNodeIODatas work = getChain()->getNodeIODatas().getOutputs(node);
+        if (work.outputs.isEmpty()) continue;
+        for (const auto &[c_id, output]: work.outputs.asKeyValueRange()) {
+            QString outputs = "";
+            bool start = true;
+            for (const auto& [property, items] : output.asKeyValueRange()) {
+                if (start) start = false;
+                else outputs += ", ";
+                outputs += property->getPropertyName() + "[";
+                bool start2 = true;
+                for (const ItemStack& item: items) {
+                    if (!start2) outputs += ", ";
+                    else start2 = false;
+                    outputs += QString::number(item.getAmount()) + "x " + item.getItem()->getName();
+                }
+            }
+            Util::println("\t" + node->getName(), " -> ", getChain()->get(c_id)->getName(), " (", outputs, ")");
+        }
+    }
+
+    Util::println("Nodes:");
+
+
+    Util::println(" ====================================== ");
 }
 

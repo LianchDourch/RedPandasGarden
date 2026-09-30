@@ -178,6 +178,7 @@ public:
         if (!node->hasProductionChain()) return getBlueprint(node)->getRecipeInput();
 
         Blueprint* work = getBlueprint(node);
+        if (work == nullptr) return {};
         QMap<ItemStackDatas, int> res = work->getRecipeInput();
         QList<ItemStack> received = node->getProductionChain()->getNodeIODatas().getUnsortedInputs(node)[ProductionNodeProperties::MATERIALS_INPUTS];
         for (ItemStack i: received) {
@@ -214,6 +215,7 @@ public:
         QLineEdit* lineEditName = new QLineEdit(selectBlueprintWidget);
         lineEditName->setPlaceholderText("Type the blueprint name");
         selectBlueprintWidget->layout()->addWidget(lineEditName);
+        QPointer<QLineEdit> pointer = lineEditName;
 
         //! Blueprint Modifiers
         // Material
@@ -233,9 +235,14 @@ public:
         blueprintTypeWidget->layout()->addWidget(isBPC);
 
 
-        parent->setSubmitterFunction([lineEditName, materialEfficiency, timeEfficiency, isBPC] (ProductionNode* node) {
+        parent->setSubmitterFunction([pointer, materialEfficiency, timeEfficiency, isBPC] (ProductionNode* node) {
+            if (pointer.isNull()) {
+                node->setMetadata(ProductionNodeProperties::MAIN_BLUEPRINT, QVariant::fromValue(ItemStack()));
+                Util::error("Unable to save as pointer is null");
+                return;
+            }
             ItemStack work;
-            work.setItem(Items::fromName(lineEditName->text(), true));
+            work.setItem(Items::fromName(pointer->text(), true));
             work.setQuantity(1);
             work.setBlueprintMaterialsModifier(1. - (materialEfficiency->value() / 100.));
             work.setBlueprintTimeModifier(1. - (timeEfficiency->value() / 100.));
