@@ -158,6 +158,7 @@ void ItemStreamsManagerForm::submit() {
             w.enqueue(s);
         }
         work->setHierarchy(k, w);
+        Util::println("\t \\ ", work->getHierarchy(k).size(), " elements.");
     }
     Util::println("End of work");
     emit streamSaved();
