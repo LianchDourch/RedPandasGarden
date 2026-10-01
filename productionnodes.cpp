@@ -621,6 +621,8 @@ void ProductionChain::refreshNodeIODatas(ProductionNode* node) {
             work.outputs[pair.nodeLocalId][pair.port].append(res);
         }
     }
+
+    nodeIODatas[node->getLocalId()] = work;
 }
 
 Character* ProductionNode::getCharacter() const { return getProductionChain()->getCharacter(); }

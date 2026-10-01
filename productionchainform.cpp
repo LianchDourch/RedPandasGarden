@@ -602,6 +602,15 @@ void ProductionChainForm::on_pushButton_debug_clicked()
     }
 
     Util::println("Nodes:");
+    for (ProductionNode* node: getChain()->getAllNodes()) {
+        Util::println(" -> ", node->getName(), ":");
+        for (const auto& [item, hier]: node->getItemStreamPtr()->getGlobalRepartition().asKeyValueRange()) {
+            Util::println("\t| Output ", item.getItem()->getName(), ":");
+            for (const ItemStreamSlot& slot: hier) {
+                Util::println("\t|\t# ", slot.getName());
+            }
+        }
+    }
 
 
     Util::println(" ====================================== ");

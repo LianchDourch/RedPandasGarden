@@ -31,10 +31,13 @@ void ItemStreamsManagerForm::reset() {
             ui->listWidget_itemList->addItem(item.getItem()->getName());
             if (!currentItem.isValid()) {
                 currentItem = item.getDatas();
-                ui->listWidget_itemList->setCurrentItem(ui->listWidget_itemList->item(ui->listWidget_itemList->count() - 1));
             }
             displayed.append(item.getDatas());
         }
+        for (const ItemStackDatas& itemStack: node->getItemStreamPtr()->getTransittingItems()) {
+            editedHierarchies[itemStack] = node->getItemStreamPtr()->getHierarchy(itemStack);
+        }
+
 
         setCurrentItemStack(currentItem, node);
     } else {
@@ -43,7 +46,17 @@ void ItemStreamsManagerForm::reset() {
 }
 
 void ItemStreamsManagerForm::setCurrentItemStack(const ItemStackDatas& item, ProductionNode* node) {
-    currentItem = item;
+    this->currentItem = item;
+
+    int i = 0;
+    for (const ItemStackDatas& d: displayed) {
+        if (d == item) {
+            ui->listWidget_itemList->setCurrentItem(ui->listWidget_itemList->item(i));
+            break;
+        }
+        i++;
+    }
+
     if (node == nullptr) node = getNode();
     QList<ItemStreamSlot> hierarchy = editedHierarchies.value(item, {});
     ui->listWidget_connectedNodes->clear();

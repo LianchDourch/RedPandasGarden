@@ -184,8 +184,9 @@ private:
 public:
     ItemStream() {}
 
+    inline QMap<ItemStackDatas, QQueue<ItemStreamSlot>> getGlobalRepartition() const { return repartition; }
     inline QList<ItemStackDatas> getTransittingItems() const { return repartition.keys(); }
-    inline const QQueue<ItemStreamSlot> getHierarchy(const ItemStackDatas& datas) const { return repartition[datas]; }
+    inline QQueue<ItemStreamSlot> getHierarchy(const ItemStackDatas& datas) const { return repartition[datas]; }
     inline void connectReceiver(const ItemStackDatas& key, ItemStreamSlot recv) { repartition[key].enqueue(recv); }
 
     inline void setHierarchy(const ItemStackDatas& key, const QQueue<ItemStreamSlot>& value) {

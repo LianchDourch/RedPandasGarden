@@ -426,6 +426,10 @@ struct ItemStackDatas {
     inline ItemStack& getItemStack() { return itemStack; }
     inline Item* getItem() const { return itemStack.getItem(); }
     inline const ItemMeta& getItemMeta() const { return itemStack.getItemMeta(); }
+
+    bool operator==(const ItemStackDatas& other) const {
+        return itemStack == other.itemStack;
+    }
 };
 
 
