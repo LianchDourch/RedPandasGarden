@@ -416,6 +416,46 @@ public:
     QSet<ItemStack> getOutputs(ProductionNode* node) override {
         return {};
     }
+
+    void fetchTotalPrice(ProductionNode* node, Character* character, std::function<void(double)> recv) override {
+        auto t = node->probeReceivedItems();
+        double* res = new double(0);
+        int* counter = new int(0);
+        bool empty = true;
+        for (const auto& [k, v]: t.asKeyValueRange()) {
+            Util::println(k->getPropertyName(), ":");
+            for (const ItemStack &i: v) {
+                Util::println("\t", i.getItem()->getName());
+                empty = false;
+                (*counter)++;
+                i.getItem()->priceFor(node->getLocation(), i.getAmount(), [k, node, recv, res, counter] (double price) {
+                    Util::println("Niice");
+                    if (price == -1 || *res == -1) *res = -1;
+                    else *res = (*res) + price;
+                    (*counter) -= 1;
+
+                    if (*counter <= 0) {
+                        double w = *res;
+                        delete res;
+                        delete counter;
+                        QMetaObject::invokeMethod(qApp, [recv, w] {
+                            Util::println("Receiving ", w);
+                            recv(-w);
+                        }, Qt::QueuedConnection);
+                    }
+                }, k == ProductionNodeProperties::IMMEDIATE_SOLD_INPUTS);
+            }
+        }
+
+        if (empty) {
+            Util::println("No inputs.");
+            delete res;
+            delete counter;
+            recv(0);
+        }
+
+        Util::println("-----------");
+    }
 };
 
 ProductionNodeType* ProductionNodeTypes::EMPTY_NODE = new DefaultProductionNodeType(0, "Empty", "prodtrashbin", {}, QColor(255, 255, 255));
@@ -548,8 +588,26 @@ void ProductionChain::saveToDB() {
     Util::println("Done.");
 }
 
-QMap<QString, QList<ItemStack>> ProductionNode::probeReceivedItems() {
-    return {};
+QMap<ProductionNodeProperty*, QList<ItemStack>> ProductionNode::probeReceivedItems() {
+    QMap<ProductionNodeProperty*, QList<ItemStack>> res = {};
+    Util::println("Probing Received Items");
+    for (const NodeConnection& conn: getParents()) {
+        ProductionNode* work = conn.getParent();
+        int remaining = 0;
+        for (const auto& [itemDatas, itemSlots]: work->getItemStream().getGlobalRepartition().asKeyValueRange()) {
+            for (ItemStreamSlot slot: itemSlots) {
+                if (slot.nodeLocalId == getLocalId()) {
+                    res[slot.port].append(ItemStack{itemDatas, std::min(getRequiredAmount(itemDatas), remaining)});
+                } else {
+                    int delta = getProductionChain()->get(slot.nodeLocalId)->getRequiredAmount(itemDatas);
+                    remaining -= (delta == -1 ? remaining : delta);
+                    if (remaining <= 0) break;
+                }
+            }
+        }
+    }
+    Util::println(" <-- Returning ", res.size(), " lines");
+    return res;
 }
 
 void ProductionChain::refreshNodeIODatasMap() {

@@ -201,6 +201,8 @@ void Item::fetchPrices(Station* hub, std::function<void(Item*)> then, std::funct
                 QVector<MarketOrder>(work.second.begin(), work.second.begin() + std::min(work.second.size(), Item::MAX_ORDER_HISTORY))
             };
 
+            Util::println("Fetched ", this->prices.size());
+
             then(this);
         });
     }

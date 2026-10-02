@@ -267,7 +267,7 @@ public:
     inline bool hasChildren() const { return !children.isEmpty(); }
     inline bool hasParents() const { return !parents.isEmpty(); }
 
-    QMap<QString, QList<ItemStack>> probeReceivedItems();
+    QMap<ProductionNodeProperty*, QList<ItemStack>> probeReceivedItems();
     QMap<int, QMap<QString, ItemStack>> probeOutputtingItems();
 
     NodeConnection getChildConnection(ProductionNode* child, NodeConnection defaultValue = NodeConnection()) {
@@ -371,7 +371,8 @@ public:
     }
 };
 
-class ProductionChain {
+class ProductionChain : public QObject {
+    Q_OBJECT
     using NodesMap = QMap<int, ProductionNode*>;
 private:
     LOCKABLE
@@ -388,7 +389,7 @@ private:
 
 public:
     ProductionChain(int localId, const QString& name, const QString& description)
-        : localId(localId), name(name), description(description) {
+        : QObject(nullptr), localId(localId), name(name), description(description) {
         inputs.reserve(5);
         outputs.reserve(5);
         nodeIOUpdated.store(true);

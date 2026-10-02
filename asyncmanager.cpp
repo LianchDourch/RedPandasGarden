@@ -90,9 +90,7 @@ void AsyncTaskWorker::startNext()
 
     emit taskStarted(task);
 
-    Util::println("Running Task ", task->getName());
     task->run();
-    Util::println("Task ", task->getName(), " ended");
 }
 
 void AsyncTaskWorker::onTaskFinished()
@@ -322,7 +320,6 @@ void AsyncTaskManager::addTask(AsyncTask* task)
         ++m_taskCount;
     }
 
-    Util::println("Adding task " + task->getName());
     /*
      * enqueue() sera exécuté dans le worker thread.
      */
@@ -330,7 +327,6 @@ void AsyncTaskManager::addTask(AsyncTask* task)
         m_worker,
         [worker = m_worker, task]()
         {
-            Util::println("Queuing task " + task->getName());
             worker->enqueue(task);
         },
         Qt::QueuedConnection

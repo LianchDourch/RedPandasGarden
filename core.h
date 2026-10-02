@@ -93,6 +93,10 @@ struct MarketOrder {
     bool isBuy = false;
 
     inline bool isNull() const { return orderId == 0; }
+
+    inline QString toString() const {
+        return "#" + QString::number(orderId) + "\t | " + QString::number(price) + " ISK/u\t |" + QString::number(volumeRemain) + " units \t| " + (isBuy ? "WTB" : "WTS");
+    }
 };
 
 struct VariableCostIndices {
@@ -259,6 +263,22 @@ public:
 
     inline double getPrice(Station* hub, bool sell = true, int index = 0) {
         return getOrder(hub, sell, index).price;
+    }
+
+    inline double getTotalPrice(Station* hub, bool sell, int quantity) {
+        int index = 0;
+        double res = 0.;
+        Util::println("hub: ", hub->getName());
+        while (quantity > 0 && hasOrder(hub, sell, index)) {
+            MarketOrder order = getOrder(hub, sell, index);
+            Util::println("\tOrder: ", order.toString());
+            res += order.price * std::min(order.volumeRemain, quantity);
+            quantity -= order.volumeRemain;
+            index++;
+        }
+        if (quantity > 0) return -1;
+        Util::println("Returning ", res);
+        return res;
     }
 
     virtual void fetchDatas(Station* hub, std::function<void(Item*)> then, ERROR_LISTENER);
