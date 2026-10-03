@@ -4,6 +4,7 @@
 #include <QGraphicsSceneContextMenuEvent>
 #include <QMenu>
 #include <QSplitter>
+#include <qinputdialog.h>
 
 ProductionChainForm::ProductionChainForm(QWidget *parent)
     : QWidget(parent)
@@ -63,6 +64,10 @@ ProductionChainForm::ProductionChainForm(QWidget *parent)
 
     chainMonitor = new QWidget();
     splitter->addWidget(chainMonitor);
+}
+
+void ProductionChainForm::setCurrentChain(ProductionChain* chain) {
+    scene->setDisplayedChain(chain);
 }
 
 void ProductionChainForm::openEditionView(ProductionNode* node) {
@@ -614,5 +619,11 @@ void ProductionChainForm::on_pushButton_debug_clicked()
 
 
     Util::println(" ====================================== ");
+}
+
+
+void ProductionChainForm::on_pushButton_magicButton2_clicked()
+{
+    setCurrentChain(ProductionChain::loadFromDB(QInputDialog::getInt(this, "Select ID", "Select ID", 0, 0, 500)));
 }
 

@@ -344,19 +344,41 @@ public:
         bool ok;
         ItemStack blueprint = node->getMetadataRef(ProductionNodeProperties::MAIN_BLUEPRINT).value<ItemStack>();
         EsiManager::requestERP(
-            "INSERT INTO prodmanufacturenodesdatas (chainLocalId, nodeLocalId, blueprintName, matModifier, timeModifier, bpc, buildingStationLocalId, runCount) "
-            "VALUES (:nodeChainId, :nodeLocalId, :blueprintName, :matModifier, :timeModifier, :isbpc, :buildingStationLocalId, :runCount);",
+            "INSERT INTO prodmanufacturenodesdatas (chainLocalId, nodeLocalId, blueprintId, matModifier, timeModifier, bpc, buildingStationLocalId, runCount, cycleCount) "
+            "VALUES (:nodeChainId, :nodeLocalId, :blueprintId, :matModifier, :timeModifier, :isbpc, :buildingStationLocalId, :runCount, :cycleCount);",
             {
              {"nodeChainId", (node->hasProductionChain() ? node->getProductionChain()->getLocalId() : 0)},
              {"nodeLocalId", node->getLocalId()},
-             {"blueprintName", blueprint.isValid() ? blueprint.getItem()->getName() : QString(NULLSTRING_BLUEPRINT)},
+             {"blueprintId", blueprint.isValid() ? blueprint.getItem()->getTypeId() : 0},
              {"matModifier", blueprint.getBlueprintMaterialsModifier()},
              {"timeModifier", blueprint.getBlueprintTimeModifier()},
              {"isbpc", blueprint.isBPC()},
              {"buildingStationLocalId", node->hasLocation() ? node->getLocation()->getLocalId() : 0},
-             {"runCount", blueprint.getBlueprintRunCount()}
+             {"runCount", blueprint.getBlueprintRunCount()},
+             {"cycleCount", node->getRunsCount()}
             }, &ok);
         if (!ok) Util::error("Couldn't insert " + node->getName() + " in spe table");
+    }
+
+    void loadDBLine(ProductionNode* node) override {
+        bool ok;
+        QSqlQuery query = EsiManager::requestERP("SELECT * FROM prodmanufacturenodesdatas WHERE chainLocalId = :chainId AND nodeLocalId = :nodeId",
+                                                 {{"chainId", node->getProductionChain()->getLocalId()}, {"nodeId", node->getLocalId()}}, &ok);
+        if (ok && query.next()) {
+            Item* item = Items::fromId(query.value("blueprintId").toLongLong(), true);
+            ItemStack blueprint = {item, 1};
+            blueprint.setBlueprintMaterialsModifier(query.value("matModifier").toDouble());
+            blueprint.setBlueprintTimeModifier(query.value("timeModifier").toDouble());
+            blueprint.setBlueprintRunCount(query.value("runCount").toInt());
+            blueprint.setBpc(query.value("bpc").toBool());
+
+            node->setMetadata(ProductionNodeProperties::MAIN_BLUEPRINT, QVariant::fromValue(blueprint));
+            node->setLocation(Stations::fromLocalId(query.value("buildingStationLocalId").toLongLong()));
+            node->setCycleCount(query.value("cycleCount").toInt());
+        } else {
+            Util::error("Unable to load node #" + QString::number(node->getLocalId()));
+            return;
+        }
     }
 
     QMap<QString, QSet<ItemView>> requiredItems(const ProductionNode* node) override {
@@ -597,7 +619,7 @@ void ProductionChain::saveToDB() {
                 for (const ItemStreamSlot& slot: queue) {
                     EsiManager::requestERP(
                         "INSERT INTO prodlinks (chainLocalId, nodeLocalId, outputSlot, targetLocalId, port, hierarchyRank) "
-                        "VALUES (:chainId, :nodeId, :outputSlot, :targetLocalId, :port, :hierarchyRank)",
+                        "VALUES (:chainId, :nodeLocalId, :outputSlot, :targetLocalId, :port, :hierarchyRank)",
                         {{"chainId", getLocalId()}, {"nodeLocalId", entry->getLocalId()},
                          {"outputSlot", itemDatas.getStringHash()}, {"targetLocalId", slot.nodeLocalId},
                          {"port", slot.port->getPropertyId()}, {"hierarchyRank", hierarchy}}, &ok);
@@ -721,4 +743,96 @@ ProductionNode *NodeConnection::getParent() const
 ProductionNode *NodeConnection::getChild() const
 {
     return child;
+}
+
+ProductionChain* ProductionChain::loadFromDB(int chainId) {
+#define nope(msg) { Util::error(msg); return nullptr; }
+#define shortcut(msg) { Util::println("WARNING : ", msg); return res; }
+    if (!EsiManager::isInDataThread()) {
+        return EsiManager::TASK_MANAGER->addTaskAndWait("Loading chain #" + QString::number(chainId) + " from db.", [chainId] { return loadFromDB(chainId); });
+    }
+
+    QSqlQuery query;
+    bool ok;
+    ProductionChain* res = nullptr;
+    query = EsiManager::requestERP("SELECT * FROM prodchains WHERE localId = :id", {{"id", chainId}}, &ok);
+    if (ok && query.next()) {
+        res = new ProductionChain(chainId, query.value("name").toString(), query.value("description").toString());
+        res->setNodesIdCounter(query.value("idNodesCounter").toLongLong());
+    } else nope("Chain not found.");
+
+    query = EsiManager::requestERP("SELECT * FROM prodchainfirstnodes WHERE chainLocalId = :id", {{"id", chainId}}, &ok);
+    if (!ok) shortcut("Chain was empty");
+
+    QMap<int, ProductionNode*> nodes;
+    QQueue<int> starts = {};
+    while (query.next()) {
+        bool test;
+        ProductionNode::loadFromDB(res, query.value("nodeLocalId").toLongLong(), &nodes, true, &test);
+        if (test) starts.enqueue(query.value("nodeLocalId").toLongLong());
+    }
+
+    while (!starts.isEmpty()) {
+        int input = starts.dequeue();
+
+        res->addRawProductionNode(nodes[input], true, true, false);
+
+        linkChildren(res, nodes[input], nodes);
+    }
+
+    return res;
+}
+
+void ProductionChain::linkChildren(ProductionChain* chain, ProductionNode* node, const QMap<int, ProductionNode *>& pool) {
+    bool ok;
+    QSqlQuery query = EsiManager::requestERP("SELECT * FROM prodnodeschildren WHERE chainLocalId = :chainId AND parentLocalId = :nodeId",
+                                   {{"chainId", chain->getLocalId()}, {"nodeId", node->getLocalId()}}, &ok);
+
+    while (query.next()) {
+        ProductionNode* child = pool[query.value("childLocalId").toLongLong()];
+        chain->addChilProductionNode(child, node, false);
+
+        linkChildren(chain, child, pool);
+    }
+}
+
+bool ProductionNode::loadFromDB(ProductionChain* chain, int nodeId, QMap<int, ProductionNode *> *nodes, bool recursiveLoad, bool* out) {
+#define NODE_NAME QString("(#") + QString::number(chain->getLocalId()) + " | #" + QString::number(nodeId) + ")"
+    ProductionNode* res = nullptr;
+    bool ok;
+    QSqlQuery query;
+    if (!nodes->contains(nodeId)) {
+        bool ok;
+        query = EsiManager::requestERP("SELECT * FROM prodnodes WHERE chainLocalId = :chainId AND nodeLocalId = :nodeId",
+                                                 {{"chainId", chain->getLocalId()}, {"nodeLocalId", nodeId}}, &ok);
+        if (ok && query.next()) {
+            res = new ProductionNode(nodeId, chain, ProductionNodeTypes::get(query.value("type").toInt()));
+        } else {
+            Util::error("No node found for " + NODE_NAME);
+            *out = false;
+            return false;
+        }
+        if (res->getType() == nullptr) {
+            Util::error("Unknown type for node " + NODE_NAME);
+            *out = false;
+            return false;
+        }
+        res->getType()->loadDBLine(res);
+        nodes->insert(nodeId, res);
+    } else res = (*nodes)[nodeId];
+
+    if (recursiveLoad) {
+        query = EsiManager::requestERP("SELECT * FROM prodnodeschildren WHERE chainLocalId = :chainId AND parentLocalId = :nodeId",
+                                       {{"chainId", chain->getLocalId()}, {"nodeId", nodeId}}, &ok);
+        if (!ok) {
+            Util::println("No children for node " + NODE_NAME);
+            *out = true;
+            return false;
+        }
+
+        while (query.next()) {
+            bool temp;
+            loadFromDB(chain, query.value("childLocalId").toLongLong(), nodes, recursiveLoad, &temp);
+        }
+    }
 }

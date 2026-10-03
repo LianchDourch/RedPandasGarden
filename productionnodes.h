@@ -132,6 +132,10 @@ struct ProductionNodeTypes {
          for (ProductionNodeType* type: VALUES) if (type->getName() == name) return type;
         return nullptr;
     }
+
+    inline static ProductionNodeType* get(int i) {
+        return VALUES.value(i, nullptr); // Garbage in garbage out
+    }
 };
 
 struct ItemFilter {
@@ -248,6 +252,10 @@ private:
     GENERAL_PROPERTY_POD(int, cycleCount, 1, getRunsCount, setCycleCount)
     GENERAL_PROPERTY_BIGPOD(ItemStream, stream, ItemStream(), getItemStream, setItemStream)
 
+private:
+    ProductionNode(qint64 localId, ProductionChain* chain, ProductionNodeType* type)
+        : localId(localId), type(type), chain(chain) {}
+
 public:
     ProductionNode(ProductionNodeType* type, Station* location)
         : type(type), location(location), metadatas({}), parents({}), children({}), description(QString()), stream() {
@@ -267,6 +275,8 @@ public:
     inline bool hasChild(ProductionNode* child) { return children.contains(NodeConnection{this, child}); }
     inline bool hasChildren() const { return !children.isEmpty(); }
     inline bool hasParents() const { return !parents.isEmpty(); }
+
+    inline bool hasLocalId() const { return localId != 0; }
 
     QMap<ProductionNodeProperty*, QList<ItemStack>> probeReceivedItems();
     QMap<int, QMap<QString, ItemStack>> probeOutputtingItems();
@@ -312,6 +322,16 @@ public:
 
 
     inline ItemStream* getItemStreamPtr() { return &stream; }
+
+    /**
+     * @brief loadFromDB
+     * @param chain
+     * @param nodeId
+     * @param nodes
+     * @param recursiveLoad
+     * @return true if the node has children (needs recursiveLoad == true not to be always false)
+     */
+    static bool loadFromDB(ProductionChain* chain, int nodeId, QMap<int, ProductionNode*> *nodes, bool recursiveLoad, bool* success);
 private:
     friend ProductionChain;
     void _addParent(ProductionNode* parent);
@@ -403,13 +423,13 @@ public:
     void refreshNodeIODatasMap();
     void refreshNodeIODatas(ProductionNode* node);
 
-    void addRawProductionNode(ProductionNode* node, bool isStart, bool isEnd) {
+    void addRawProductionNode(ProductionNode* node, bool isStart, bool isEnd, bool editNodeId = true) {
         if (node == nullptr) return;
         if (allNodes.value(node->getLocalId(), nullptr) == node) {
             Util::error("AddRawProductionNode for an already existing node !!!");
             return;
         }
-        node->setLocalId(nodesIdCounter++);
+        if (editNodeId) node->setLocalId(nodesIdCounter++);
         allNodes.insert(node->getLocalId(), node);
 
         if (isStart) inputs.insert(node);
@@ -422,18 +442,18 @@ public:
         return allNodes.value(localId, nullptr);
     }
 
-    void addRawProductionNode(ProductionNode* node) {
-        addRawProductionNode(node, !node->hasParents(), !node->hasChildren());
+    void addRawProductionNode(ProductionNode* node, bool editNodeId = true) {
+        addRawProductionNode(node, !node->hasParents(), !node->hasChildren(), editNodeId);
     }
 
-    void addChilProductionNode(ProductionNode* node, ProductionNode* parent) {
-        addRawProductionNode(node, false, !node->hasChildren());
+    void addChilProductionNode(ProductionNode* node, ProductionNode* parent, bool editNodeId = true) {
+        addRawProductionNode(node, false, !node->hasChildren(), editNodeId);
         if (outputs.contains(parent)) outputs.remove(parent);
         node->_addParent(parent);
     }
 
-    void addParentProductionNode(ProductionNode* node, ProductionNode* child) {
-        addRawProductionNode(node, !node->hasParents(), false);
+    void addParentProductionNode(ProductionNode* node, ProductionNode* child, bool editNodeId = true) {
+        addRawProductionNode(node, !node->hasParents(), false, editNodeId);
         if (inputs.contains(child)) {
             inputs.remove(child);
         }
@@ -462,6 +482,13 @@ public:
     inline bool isIOUpdated() const { return nodeIOUpdated.load(); }
     inline void setIOUpdated(bool updated) { nodeIOUpdated.store(updated); }
     inline void notifyIOUpdate() { setIOUpdated(true); }
+
+    static ProductionChain* loadFromDB(int chainId);
+private:
+    static void linkChildren(ProductionChain* chain, ProductionNode* node, const QMap<int, ProductionNode *> &pool);
+
+private:
+    void setNodesIdCounter(qint64 v) { this->nodesIdCounter = v; }
 };
 
 #endif // PRODUCTIONNODES_H

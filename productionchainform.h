@@ -293,6 +293,7 @@ public:
     void openConnectionEditionView(ConnectionItem* connection);
 
     inline ProductionChain* getProductionChain() const { return prodChain; }
+    inline void setDisplayedChain(ProductionChain* chain) { this->prodChain = chain; rebuildChainView(); }
 protected:
     double buildLine(ProductionNode* node, double xstart, double maxY);
 
@@ -409,12 +410,15 @@ public:
     void notifyNodeChanges(ProductionNode* node);
 
     inline ProductionChain* getChain() const { return scene->getProductionChain(); }
+    void setCurrentChain(ProductionChain* chain);
 private slots:
     void on_pushButton_refresh_clicked();
 
     void on_pushButton_saveChain_clicked();
 
     void on_pushButton_debug_clicked();
+
+    void on_pushButton_magicButton2_clicked();
 
 private:
     Ui::PoductionChainForm *ui;

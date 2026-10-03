@@ -217,6 +217,11 @@ struct Stations {
         for (Station* hub: VALUES) if (hub->getName() == name) return hub;
         return nullptr;
     }
+
+    static Station* fromLocalId(int localId) {
+        for (Station* hub: VALUES) if (hub->getLocalId() == localId) return hub;
+        return nullptr;
+    }
 };
 
 class ItemType {
