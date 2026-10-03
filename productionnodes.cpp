@@ -804,7 +804,7 @@ bool ProductionNode::loadFromDB(ProductionChain* chain, int nodeId, QMap<int, Pr
     if (!nodes->contains(nodeId)) {
         bool ok;
         query = EsiManager::requestERP("SELECT * FROM prodnodes WHERE chainLocalId = :chainId AND nodeLocalId = :nodeId",
-                                                 {{"chainId", chain->getLocalId()}, {"nodeLocalId", nodeId}}, &ok);
+                                                 {{"chainId", chain->getLocalId()}, {"nodeId", nodeId}}, &ok);
         if (ok && query.next()) {
             res = new ProductionNode(nodeId, chain, ProductionNodeTypes::get(query.value("type").toInt()));
         } else {
