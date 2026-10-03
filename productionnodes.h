@@ -329,9 +329,8 @@ public:
      * @param nodeId
      * @param nodes
      * @param recursiveLoad
-     * @return true if the node has children (needs recursiveLoad == true not to be always false)
      */
-    static bool loadFromDB(ProductionChain* chain, int nodeId, QMap<int, ProductionNode*> *nodes, bool recursiveLoad, bool* success);
+    static void loadFromDB(ProductionChain* chain, int nodeId, QMap<int, ProductionNode*> *nodes, bool recursiveLoad, bool* success);
 private:
     friend ProductionChain;
     void _addParent(ProductionNode* parent);

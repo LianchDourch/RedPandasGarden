@@ -796,7 +796,7 @@ void ProductionChain::linkChildren(ProductionChain* chain, ProductionNode* node,
     }
 }
 
-bool ProductionNode::loadFromDB(ProductionChain* chain, int nodeId, QMap<int, ProductionNode *> *nodes, bool recursiveLoad, bool* out) {
+void ProductionNode::loadFromDB(ProductionChain* chain, int nodeId, QMap<int, ProductionNode *> *nodes, bool recursiveLoad, bool* out) {
 #define NODE_NAME QString("(#") + QString::number(chain->getLocalId()) + " | #" + QString::number(nodeId) + ")"
     ProductionNode* res = nullptr;
     bool ok;
@@ -810,12 +810,12 @@ bool ProductionNode::loadFromDB(ProductionChain* chain, int nodeId, QMap<int, Pr
         } else {
             Util::error("No node found for " + NODE_NAME + " -> " + QString::number(ok));
             *out = false;
-            return false;
+            return;
         }
         if (res->getType() == nullptr) {
             Util::error("Unknown type for node " + NODE_NAME);
             *out = false;
-            return false;
+            return;
         }
         res->getType()->loadDBLine(res);
         nodes->insert(nodeId, res);
@@ -827,7 +827,7 @@ bool ProductionNode::loadFromDB(ProductionChain* chain, int nodeId, QMap<int, Pr
         if (!ok) {
             Util::println("No children for node " + NODE_NAME);
             *out = true;
-            return false;
+            return;
         }
 
         while (query.next()) {
