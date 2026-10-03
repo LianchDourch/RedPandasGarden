@@ -53,12 +53,13 @@ class ProductionNodeProperty {
 public:
     using PropertyProviderMap = QMap<QString, ProductionNodeProperty*>;
 private:
+    CONST_CONSTRUCTABLE_PROPERTY_POD(qint64, propertyId, getPropertyId);
     CONST_CONSTRUCTABLE_PROPERTY_BIGPOD(QString, propertyKey, getPropertyKey);
     CONST_CONSTRUCTABLE_PROPERTY_BIGPOD(QString, propertyName, getPropertyName);
     std::function<QWidget*(QWidget* parent, std::function<void(QVariant)> receiver, ERROR_LISTENER_CPP)> providerBuilder;
 
 public:
-    CONSTRUCTOR(ProductionNodeProperty, propertyKey, propertyName) {}
+    CONSTRUCTOR(ProductionNodeProperty, propertyId, propertyKey, propertyName) {}
 
     ProductionNodeProperty* setProvider(std::function<QWidget*(QWidget* parent, std::function<void(QVariant)> receiver, ERROR_LISTENER_CPP)> providerBuilder) { providerBuilder = (providerBuilder); return this; }
 
@@ -66,10 +67,10 @@ public:
 };
 
 struct ProductionNodeProperties {
-    inline static ProductionNodeProperty* MAIN_BLUEPRINT = new ProductionNodeProperty("mainblueprint", "Main Blueprint");
-    inline static ProductionNodeProperty* MATERIALS_INPUTS = new ProductionNodeProperty("matinputs", "Material Inputs");
-    inline static ProductionNodeProperty* LONG_SOLD_INPUTS = new ProductionNodeProperty("sellorder_soldinputs", "Sold via Sell Orders");
-    inline static ProductionNodeProperty* IMMEDIATE_SOLD_INPUTS = new ProductionNodeProperty("buyorder_soldinputs", "Sold via Buy Orders");
+    inline static ProductionNodeProperty* MAIN_BLUEPRINT = new ProductionNodeProperty(1, "mainblueprint", "Main Blueprint");
+    inline static ProductionNodeProperty* MATERIALS_INPUTS = new ProductionNodeProperty(2, "matinputs", "Material Inputs");
+    inline static ProductionNodeProperty* LONG_SOLD_INPUTS = new ProductionNodeProperty(3, "sellorder_soldinputs", "Sold via Sell Orders");
+    inline static ProductionNodeProperty* IMMEDIATE_SOLD_INPUTS = new ProductionNodeProperty(4, "buyorder_soldinputs", "Sold via Buy Orders");
 
     inline static QMap<QString, ProductionNodeProperty*> PROPERTIES = {
         {MAIN_BLUEPRINT->getPropertyKey(), MAIN_BLUEPRINT},

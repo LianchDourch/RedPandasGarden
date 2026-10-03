@@ -68,6 +68,8 @@ private slots:
     void on_listWidget_itemList_itemClicked(QListWidgetItem *item);
     void on_listWidget_hierarchy_itemClicked(QListWidgetItem *item);
     void on_listWidget_properties_itemClicked(QListWidgetItem *item);
+    void on_listWidget_properties_itemDoubleClicked(QListWidgetItem *item);
+    void on_listWidget_hierarchy_currentItemChanged(QListWidgetItem *current, QListWidgetItem *previous);
 };
 
 #endif // ITEMSTREAMSMANAGERFORM_H

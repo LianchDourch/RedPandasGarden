@@ -192,3 +192,15 @@ void ItemStreamsManagerForm::on_listWidget_properties_itemClicked(QListWidgetIte
     ui->listWidget_hierarchy->item(editedSlotIndex)->setText(slot.getName(getChain()->get(slot.nodeLocalId)->getName()));
 }
 
+
+void ItemStreamsManagerForm::on_listWidget_properties_itemDoubleClicked(QListWidgetItem *item)
+{
+
+}
+
+
+void ItemStreamsManagerForm::on_listWidget_hierarchy_currentItemChanged(QListWidgetItem *current, QListWidgetItem *previous)
+{
+
+}
+

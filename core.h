@@ -450,6 +450,15 @@ struct ItemStackDatas {
     bool operator==(const ItemStackDatas& other) const {
         return itemStack == other.itemStack;
     }
+
+    /**
+     * @brief getStringHash pour le stockage dans la bdd, a.getStringHash() == b.getStringHash() <=> a == b
+     * @return
+     */
+    QString getStringHash() const {
+        // TODO je gère pas les metadatas
+        return QString::number(itemStack.getItem()->getTypeId());
+    }
 };
 
 

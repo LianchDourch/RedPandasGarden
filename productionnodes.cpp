@@ -525,6 +525,11 @@ ProductionNodeType::ProductionNodeType(int id, const QString &name, const QStrin
 }
 
 void ProductionChain::saveToDB() {
+    if (!EsiManager::isInDataThread()) {
+        EsiManager::TASK_MANAGER->addTaskAndWait("Saving production chain", [this] { saveToDB(); return 0; });
+        return;
+    }
+
     Util::println("Starting to save");
     bool ok = false;
     EsiManager::ERP.transaction();
@@ -582,6 +587,27 @@ void ProductionChain::saveToDB() {
             EsiManager::requestERP(
                 "INSERT INTO prodchainfirstnodes (chainLocalId, nodeLocalId) VALUES (:chainId, :nodeId)",
                 {{"chainId", getLocalId()}, {"nodeId", entry->getLocalId()}});
+        }
+
+        EsiManager::requestERP("DELETE FROM prodlinks WHERE chainLocalId = :chainId", {{"chainId", getLocalId()}}, &ok);
+        if (!ok) Util::error("Unable to clear prodlinks");
+        for (ProductionNode* entry: getAllNodes()) {
+            for (const auto& [itemDatas, queue]: entry->getItemStreamPtr()->getGlobalRepartition().asKeyValueRange()) {
+                int hierarchy = 0;
+                for (const ItemStreamSlot& slot: queue) {
+                    EsiManager::requestERP(
+                        "INSERT INTO prodlinks (chainLocalId, nodeLocalId, outputSlot, targetLocalId, port, hierarchyRank) "
+                        "VALUES (:chainId, :nodeId, :outputSlot, :targetLocalId, :port, :hierarchyRank)",
+                        {{"chainId", getLocalId()}, {"nodeLocalId", entry->getLocalId()},
+                         {"outputSlot", itemDatas.getStringHash()}, {"targetLocalId", slot.nodeLocalId},
+                         {"port", slot.port->getPropertyId()}, {"hierarchyRank", hierarchy}}, &ok);
+                    if (!ok) Util::println("MINOR ERROR: Unable to save ", entry->getName(),
+                                    " (#", entry->getLocalId(), ") from chain #",
+                                    getLocalId(), " on item ", itemDatas.getStringHash(),
+                                    " at slot ", hierarchy, ": #", slot.nodeLocalId, " at ", slot.port->getPropertyName());
+                    hierarchy++;
+                }
+            }
         }
     }
     EsiManager::ERP.commit();
