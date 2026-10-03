@@ -808,7 +808,7 @@ bool ProductionNode::loadFromDB(ProductionChain* chain, int nodeId, QMap<int, Pr
         if (ok && query.next()) {
             res = new ProductionNode(nodeId, chain, ProductionNodeTypes::get(query.value("type").toInt()));
         } else {
-            Util::error("No node found for " + NODE_NAME);
+            Util::error("No node found for " + NODE_NAME + " -> " + QString::number(ok));
             *out = false;
             return false;
         }
