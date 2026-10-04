@@ -648,6 +648,24 @@ void ProductionChainForm::setManagerVisibility(bool visible) {
     ui->widget_closeManager->setVisible(visible);
 }
 
+void ProductionChainScene::contextMenuEvent(QGraphicsSceneContextMenuEvent* event) {
+    QMenu menu;
+
+    QAction* addNode = menu.addAction("Create Node");
+
+    connect(addNode, &QAction::triggered, this, [this, event]() {
+        QPointF pos = event->scenePos();
+
+        ProductionNode* node = new ProductionNode(ProductionNodeTypes::EMPTY_NODE, nullptr);
+        getProductionChain()->addRawProductionNode(node, true, true, true);
+        getMaster()->getMaster()->refreshAll();
+    });
+
+    menu.exec(event->screenPos());
+
+    event->accept();
+}
+
 void ProductionChainForm::refreshManager() {
     if (getChain() == nullptr) ui->widget_currentChainManagement->hide();
     else {

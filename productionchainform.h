@@ -300,6 +300,8 @@ protected:
     void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
 
     void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
+
+    void contextMenuEvent(QGraphicsSceneContextMenuEvent* event) override;
 };
 
 class ProductionNodeEditionWidget : public QWidget {
