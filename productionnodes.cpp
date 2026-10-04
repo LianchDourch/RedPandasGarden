@@ -749,9 +749,11 @@ ProductionChain* ProductionChain::loadFromDB(int chainId) {
 #define nope(msg) { Util::error(msg); return nullptr; }
 #define shortcut(msg) { Util::println("WARNING : ", msg); return res; }
     if (!EsiManager::isInDataThread()) {
+        Util::println("Going to thread");
         return EsiManager::TASK_MANAGER->addTaskAndWait("Loading chain #" + QString::number(chainId) + " from db.", [chainId] { return loadFromDB(chainId); });
     }
 
+    Util::println("Starting");
     QSqlQuery query;
     bool ok;
     ProductionChain* res = nullptr;
@@ -759,6 +761,7 @@ ProductionChain* ProductionChain::loadFromDB(int chainId) {
     if (ok && query.next()) {
         res = new ProductionChain(chainId, query.value("name").toString(), query.value("description").toString());
         res->setNodesIdCounter(query.value("idNodesCounter").toLongLong());
+        Util::println("res: ", res->getName());
     } else nope("Chain not found.");
 
     query = EsiManager::requestERP("SELECT * FROM prodchainfirstnodes WHERE chainLocalId = :id", {{"id", chainId}}, &ok);
@@ -822,6 +825,7 @@ void ProductionNode::loadFromDB(ProductionChain* chain, int nodeId, QMap<int, Pr
     } else res = (*nodes)[nodeId];
 
     if (recursiveLoad) {
+        Util::println("Loading recursively #", nodeId);
         query = EsiManager::requestERP("SELECT * FROM prodnodeschildren WHERE chainLocalId = :chainId AND parentLocalId = :nodeId",
                                        {{"chainId", chain->getLocalId()}, {"nodeId", nodeId}}, &ok);
         if (!ok) {
@@ -831,6 +835,7 @@ void ProductionNode::loadFromDB(ProductionChain* chain, int nodeId, QMap<int, Pr
         }
 
         while (query.next()) {
+            Util::println("childLocalId: ", query.value("childLocalId").toLongLong());
             bool temp;
             loadFromDB(chain, query.value("childLocalId").toLongLong(), nodes, recursiveLoad, &temp);
         }
