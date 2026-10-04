@@ -385,6 +385,10 @@ public:
     inline void setBlueprintRunCount(int runcount) { setMetadata(BLUEPRINT_RUNCOUNT_ISKEY, runcount); }
     Blueprint* getBlueprint() const;
 
+    inline QString getName() const {
+        return item == nullptr ? "null" : item->getName();
+    }
+
     inline void setMetadata(const QString& key, const QVariant& value) {
         itemMeta.insert(key, value);
     }
@@ -451,6 +455,7 @@ struct ItemStackDatas {
     inline ItemStack& getItemStack() { return itemStack; }
     inline Item* getItem() const { return itemStack.getItem(); }
     inline const ItemMeta& getItemMeta() const { return itemStack.getItemMeta(); }
+
 
     bool operator==(const ItemStackDatas& other) const {
         return itemStack == other.itemStack;

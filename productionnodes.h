@@ -86,6 +86,13 @@ struct ProductionNodeProperties {
         }
         return nullptr;
     }
+
+    inline static ProductionNodeProperty* fromId(int id) {
+        for (const auto& [k, v]: PROPERTIES.asKeyValueRange()) {
+            if (v->getPropertyId() == id) return v;
+        }
+        return nullptr;
+    }
 };
 
 class ProductionNodeType {
@@ -148,7 +155,7 @@ struct ItemFilter {
 };
 
 struct ItemStreamSlot {
-    int nodeLocalId = 0;
+    qint64 nodeLocalId = 0;
     ProductionNodeProperty* port = nullptr;
 
     inline QString getName(const QString &nodeName) const {
@@ -192,6 +199,7 @@ public:
     inline QMap<ItemStackDatas, QQueue<ItemStreamSlot>> getGlobalRepartition() const { return repartition; }
     inline QList<ItemStackDatas> getTransittingItems() const { return repartition.keys(); }
     inline QQueue<ItemStreamSlot> getHierarchy(const ItemStackDatas& datas) const { return repartition[datas]; }
+    inline QQueue<ItemStreamSlot>& getHierarchyRef(const ItemStackDatas& datas) { return repartition[datas]; }
     inline void connectReceiver(const ItemStackDatas& key, ItemStreamSlot recv) { repartition[key].enqueue(recv); }
 
     inline void setHierarchy(const ItemStackDatas& key, const QQueue<ItemStreamSlot>& value) {
@@ -323,6 +331,16 @@ public:
 
     inline ItemStream* getItemStreamPtr() { return &stream; }
 
+
+    ItemStackDatas fromHash(const QString& itemHash) {
+        qint64 typeId = itemHash.toLongLong();
+        for (const ItemStack& datas: getOutputs()) {
+            Util::println(itemHash, " =?= ", datas.getName(), " (", datas.getItem()->getTypeId(), ")");
+            if (datas.getItem()->getTypeId() == typeId) return datas.getDatas();
+        }
+        return ItemStackDatas{};
+    }
+
     /**
      * @brief loadFromDB
      * @param chain
@@ -330,7 +348,7 @@ public:
      * @param nodes
      * @param recursiveLoad
      */
-    static void loadFromDB(ProductionChain* chain, int nodeId, QMap<int, ProductionNode*> *nodes, bool recursiveLoad, bool* success);
+    static void loadFromDB(ProductionChain* chain, int nodeId, QMap<qint64, ProductionNode*> *nodes, bool recursiveLoad, bool* success);
 private:
     friend ProductionChain;
     void _addParent(ProductionNode* parent);
@@ -418,6 +436,9 @@ public:
         Util::println("Killing chain :(");
     }
 
+    inline void setName(const QString& name) { this->name = name; }
+    inline void setDescription(const QString& description) { this->description = description; }
+
     inline void updateNodeIODatasMap() { if (isIOUpdated()) refreshNodeIODatasMap(); }
     void refreshNodeIODatasMap();
     void refreshNodeIODatas(ProductionNode* node);
@@ -484,7 +505,7 @@ public:
 
     static ProductionChain* loadFromDB(int chainId);
 private:
-    static void linkChildren(ProductionChain* chain, ProductionNode* node, const QMap<int, ProductionNode *> &pool);
+    static void linkChildren(ProductionChain* chain, ProductionNode* node, const QMap<qint64, ProductionNode *> &pool);
 
 private:
     void setNodesIdCounter(qint64 v) { this->nodesIdCounter = v; }

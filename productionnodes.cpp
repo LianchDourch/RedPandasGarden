@@ -767,8 +767,8 @@ ProductionChain* ProductionChain::loadFromDB(int chainId) {
     query = EsiManager::requestERP("SELECT * FROM prodchainfirstnodes WHERE chainLocalId = :id", {{"id", chainId}}, &ok);
     if (!ok) shortcut("Chain was empty");
 
-    QMap<int, ProductionNode*> nodes;
-    QQueue<int> starts = {};
+    QMap<qint64, ProductionNode*> nodes;
+    QQueue<qint64> starts = {};
     while (query.next()) {
         bool test;
         ProductionNode::loadFromDB(res, query.value("nodeLocalId").toLongLong(), &nodes, true, &test);
@@ -783,10 +783,33 @@ ProductionChain* ProductionChain::loadFromDB(int chainId) {
         linkChildren(res, nodes[input], nodes);
     }
 
+    query = EsiManager::requestERP("SELECT * FROM prodlinks WHERE chainLocalId = :chainId ORDER BY hierarchyRank ASC", {{"chainId", chainId}}, &ok);
+    if (!ok) {
+        Util::error("Unable to get prod links");
+    }
+    while (query.next()) {
+        Util::println("Parsing line:");
+        ProductionNode* parent = res->get(query.value("nodeLocalId").toLongLong());
+        ItemStackDatas slot = parent->fromHash(query.value("outputSlot").toString());
+        Util::println("Item hash was ", query.value("outputSlot").toString(), " and slot is ", slot.getItemStack().getName());
+        if (!slot.isValid()) continue;
+        Util::println("\tApplying: ", parent->getName(), " - ", slot.getItem()->getName(), " going to #", query.value("targetLocalId").toLongLong(), " port ", ProductionNodeProperties::fromId(query.value("port").toInt())->getPropertyName());
+        parent->getItemStreamPtr()->getHierarchyRef(slot).append(ItemStreamSlot{query.value("targetLocalId").toLongLong(), ProductionNodeProperties::fromId(query.value("port").toInt())});
+    }
+
+    Util::println(
+        "CHAIN ",
+        res->getLocalId(),
+        " nodes=", res->getAllNodes().size(),
+        " inputs=", res->getInputs().size()
+        );
+
+    res->notifyIOUpdate();
+    res->refreshNodeIODatasMap();
     return res;
 }
 
-void ProductionChain::linkChildren(ProductionChain* chain, ProductionNode* node, const QMap<int, ProductionNode *>& pool) {
+void ProductionChain::linkChildren(ProductionChain* chain, ProductionNode* node, const QMap<qint64, ProductionNode *>& pool) {
     bool ok;
     QSqlQuery query = EsiManager::requestERP("SELECT * FROM prodnodeschildren WHERE chainLocalId = :chainId AND parentLocalId = :nodeId",
                                    {{"chainId", chain->getLocalId()}, {"nodeId", node->getLocalId()}}, &ok);
@@ -799,7 +822,7 @@ void ProductionChain::linkChildren(ProductionChain* chain, ProductionNode* node,
     }
 }
 
-void ProductionNode::loadFromDB(ProductionChain* chain, int nodeId, QMap<int, ProductionNode *> *nodes, bool recursiveLoad, bool* out) {
+void ProductionNode::loadFromDB(ProductionChain* chain, int nodeId, QMap<qint64, ProductionNode *> *nodes, bool recursiveLoad, bool* out) {
 #define NODE_NAME QString("(#") + QString::number(chain->getLocalId()) + " | #" + QString::number(nodeId) + ")"
     ProductionNode* res = nullptr;
     bool ok;
@@ -840,4 +863,6 @@ void ProductionNode::loadFromDB(ProductionChain* chain, int nodeId, QMap<int, Pr
             loadFromDB(chain, query.value("childLocalId").toLongLong(), nodes, recursiveLoad, &temp);
         }
     }
+
+    *out = true;
 }

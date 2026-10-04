@@ -1,4 +1,5 @@
 #include "productionchainform.h"
+#include "esimanager.h"
 #include "ui_productionchainform.h"
 #include "core.h"
 #include <QGraphicsSceneContextMenuEvent>
@@ -11,8 +12,6 @@ ProductionChainForm::ProductionChainForm(QWidget *parent)
     , ui(new Ui::PoductionChainForm)
 {
     ui->setupUi(this);
-
-
 
     ProductionChain* chain = new ProductionChain(1, "Test Chain 1", "Description de test");
     ProductionNode* n2 = new ProductionNode(ProductionNodeTypes::MANUFACTURE, Stations::fromName("Jita 4-4"));
@@ -64,10 +63,13 @@ ProductionChainForm::ProductionChainForm(QWidget *parent)
 
     chainMonitor = new QWidget();
     splitter->addWidget(chainMonitor);
+
+    setManagerVisibility(true);
 }
 
 void ProductionChainForm::setCurrentChain(ProductionChain* chain) {
     scene->setDisplayedChain(chain);
+    refreshManager();
 }
 
 void ProductionChainForm::openEditionView(ProductionNode* node) {
@@ -625,5 +627,71 @@ void ProductionChainForm::on_pushButton_debug_clicked()
 void ProductionChainForm::on_pushButton_magicButton2_clicked()
 {
     setCurrentChain(ProductionChain::loadFromDB(QInputDialog::getInt(this, "Select ID", "Select ID", 0, 0, 500)));
+}
+
+
+void ProductionChainForm::on_pushButton_open_clicked()
+{
+}
+
+
+void ProductionChainForm::on_pushButton_foldManager_clicked()
+{
+    setManagerVisibility(false);
+}
+
+void ProductionChainForm::setManagerVisibility(bool visible) {
+    if (visible) refreshManager();
+
+    ui->widget_manager->setVisible(visible);
+    ui->widget_openChainManager->setVisible(!visible);
+    ui->widget_closeManager->setVisible(visible);
+}
+
+void ProductionChainForm::refreshManager() {
+    if (getChain() == nullptr) ui->widget_currentChainManagement->hide();
+    else {
+        ui->lineEdit_name->setText(getChain()->getName());
+        ui->plainTextEdit_description->setPlainText(getChain()->getDescription());
+
+        ui->widget_currentChainManagement->show();
+    }
+
+    ui->listWidget_chains->clear();
+    QSqlQuery query = EsiManager::requestERP("SELECT localId, name FROM prodchains");
+    while (query.next()) {
+        ui->listWidget_chains->addItem(query.value("name").toString());
+        ui->listWidget_chains->item(ui->listWidget_chains->count()-1)->setData(Qt::UserRole, query.value("localId"));
+    }
+}
+
+
+void ProductionChainForm::on_pushButton_unfoldManager_clicked()
+{
+    setManagerVisibility(true);
+}
+
+
+void ProductionChainForm::on_pushButton_createChain_clicked()
+{
+    QSqlQuery q = EsiManager::requestERP("SELECT COALESCE(MAX(localId), 0) FROM prodchains");
+    q.next();
+    qint64 id = q.value(0).toLongLong() + 1;
+    ProductionChain* chain = new ProductionChain(id, "New Production Chain", "Newly made production chain.");
+
+    setCurrentChain(chain);
+}
+
+
+void ProductionChainForm::on_pushButton_submit_clicked()
+{
+    getChain()->setName(ui->lineEdit_name->text());
+    getChain()->setDescription(ui->plainTextEdit_description->toPlainText());
+}
+
+
+void ProductionChainForm::on_listWidget_chains_itemDoubleClicked(QListWidgetItem *item)
+{
+    setCurrentChain(ProductionChain::loadFromDB(item->data(Qt::UserRole).toLongLong()));
 }
 

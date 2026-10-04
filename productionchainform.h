@@ -411,6 +411,9 @@ public:
 
     inline ProductionChain* getChain() const { return scene->getProductionChain(); }
     void setCurrentChain(ProductionChain* chain);
+
+    void setManagerVisibility(bool visible);
+    void refreshManager();
 private slots:
     void on_pushButton_refresh_clicked();
 
@@ -420,10 +423,22 @@ private slots:
 
     void on_pushButton_magicButton2_clicked();
 
+    void on_pushButton_open_clicked();
+
+    void on_pushButton_foldManager_clicked();
+
+    void on_pushButton_unfoldManager_clicked();
+
+    void on_pushButton_createChain_clicked();
+
+    void on_pushButton_submit_clicked();
+
+    void on_listWidget_chains_itemDoubleClicked(QListWidgetItem *item);
+
 private:
     Ui::PoductionChainForm *ui;
     ProductionChainView* view;
-    ProductionChainScene* scene;
+    ProductionChainScene* scene = nullptr;
     ProductionNodeEditionWidget* nodeEditionView;
     NodeConnectionEditionWidget* nodeConnectionView;
     QWidget* chainMonitor;
